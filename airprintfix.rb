@@ -11,16 +11,15 @@ class Airprint
   def initialize
     self.service="_ipp._tcp"
     self.domain="local"
-    self.script="airprint.sh"
+    self.script="airprintfix.sh"
     self.timeout=5
   end
 
   def browse(s=self.service, d=self.domain, t=self.timeout)
     browser = DNSSD::Service.new
     printers=[]
-    puts "Browsing for #{s} services in domain #{d}..."
-    begin
-      Timeout::timeout t do
+    t = Thread.new do
+        puts "Browsing for #{s} services in domain #{d}..."
         browser.browse s, d do |reply|
           resolver = DNSSD::Service.new
           resolver.resolve reply do |r|
@@ -28,10 +27,9 @@ class Airprint
             printers.push r
           end
         end
-      end
-    rescue
-      # puts "Timed out"
     end
+    sleep self.timeout
+    Thread.kill t
     # there might be more than one interface
     up = printers.uniq { |r| r.name }
     puts "Found #{up.count} unique from #{printers.count} entries" if up.count > 0
@@ -50,6 +48,7 @@ class Airprint
     txt.each_pair do |k,v|
       puts "\t#{k} = #{v}"
     end
+    fd.write "#!/bin/bash\n\n"
     fd.write "dns-sd -R \"#{r.name} airprint\" _ipp._tcp,_universal . 631"
     txt.each_pair do |k,v|
       fd.write " \\\n\t#{k}=\'#{v}\'"
@@ -98,23 +97,24 @@ OptionParser.new do |opts|
 
 end.parse!
 
-if ARGV.count != 0 or cmd.count != 1
+if ARGV.count != 0 or cmd.count > 1
   puts "Bad command"
   exit
 end
 
+
 # require sudo to update /Library
-euid=`id -u`.to_i
-isRoot = (euid == 0)
-if (options.key? :install or options.key? :uninstall) and !isRoot
+isRoot = (Process.euid == 0)
+if (cmd.key? :install or cmd.key? :uninstall) and !isRoot
   puts "Run with sudo to install or uninstall"
   exit
 end
 
+ap = Airprint.new
 
 # plist for LaunchControl
 hostname = `hostname`.strip.gsub(/\..*$/,'')
-revhost = "local.#{hostname}.airprint"
+revhost = "local.#{hostname}.airprintfix"
 launchlib = "/Library/LaunchDaemons"
 launchfile=revhost + ".plist"
 
@@ -124,35 +124,35 @@ plist=<<EOT
 <plist version="1.0">
 <dict>
         <key>Label</key>
-        <string>#{revhost}</string>
+          <string>#{revhost}</string>
         <key>ProgramArguments</key>
-        <array>
-                <string>/Library/LaunchDaemons/airprint.sh</string>
-        </array>
+          <array>
+                  <string>/Library/LaunchDaemons/#{ap.script}</string>
+          </array>
         <key>LowPriorityIO</key>
-        <true/>
+          <true/>
         <key>Nice</key>
-        <integer>1</integer>
+          <integer>1</integer>
         <key>UserName</key>
-        <string>root</string>
+          <string>root</string>
         <key>RunAtLoad</key>
-        <true/>
+          <true/>
         <key>Keeplive</key>
-        <true/>
+          <true/>
 </dict>
 </plist>
 EOT
 
-ap = Airprint.new
 
 
-if options.key? :uninstall
-  `launchctl unload #{launchfile}`
+if cmd.key? :uninstall
+  system "launchctl unload #{launchfile}"
+  rc = $?.exitstatus
   puts "Uninstalling #{ap.script} from #{launchlib}"
-  delete File.expand_path ap.script, launchlib
+  File.delete File.expand_path ap.script, launchlib
   puts "Uninstalling #{launchfile} from #{launchlib}"
-  delete File.expand_path launchfile, launchlib
-  exit
+  File.delete File.expand_path launchfile, launchlib
+  exit rc
 end
 
 
@@ -165,30 +165,33 @@ if count == 0
 end
 
 # if not installing, create files in the working directory
-wd = options.key?(:install) ? launchlib : "."
-p wd
+wd = cmd.key?(:install) ? launchlib : "."
 
 # write script to register them
 bg = (count > 1)
-File.open File.expand_path(ap.script, wd), 'w' do |fd|
+f = File.expand_path(ap.script, wd)
+File.open f, 'w', 0755 do |fd|
   printers.each { |r| ap.expand fd, r, bg }
 end
 
 # write a plist file to launch it
-File.open File.expand_path(launchfile, wd), 'w' do |fd|
+File.open File.expand_path(launchfile, wd), 'w', 0644 do |fd|
   fd.write plist
 end
 
-if options.key? :install
-  `launchctl load #{launchfile}`
-  puts "Installed"
-  exit
+if cmd.key? :install
+  plist = File.expand_path(launchfile, wd)
+  system "launchctl load -w #{plist}"
+  rc = $?.exitstatus
+  puts (rc == 0) ? "Installed" : "Failed to install #{plist}, rc=#{rc}"
+  exit rc
 end
 
-if options.key? :test
+if cmd.key? :test
   puts "Registering printer, use CTRL-C when done"
-  `sh #{ap.script}`
-  exit
+  trap 'INT' do exit end
+  system "/bin/bash #{ap.script}"
+  exit $?.exitstatus
 end
 
 exit
