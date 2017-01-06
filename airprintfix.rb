@@ -56,7 +56,7 @@ class Airprint
     if bg
       fd.write ' &'
     end
-    fd.puts 
+    fd.puts
   end
 
 end
