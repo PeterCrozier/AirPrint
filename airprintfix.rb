@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -rubygems
+#!/usr/bin/env ruby
 #
 require 'dnssd'
 require 'timeout'
@@ -16,13 +16,11 @@ class Airprint
   end
 
   def browse(s=self.service, d=self.domain, t=self.timeout)
-    browser = DNSSD::Service.new
     printers=[]
     t = Thread.new do
         puts "Browsing for #{s} services in domain #{d}..."
-        browser.browse s, d do |reply|
-          resolver = DNSSD::Service.new
-          resolver.resolve reply do |r|
+        DNSSD.browse s, d do |reply|
+          DNSSD.resolve reply do |r|
             puts "Resolved #{r.name}"
             printers.push r
           end
