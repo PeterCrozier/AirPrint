@@ -2,7 +2,16 @@
 
 ### Quick and dirty install
 
-Use the Terminal app to run the install script on the Mac with the printer to be shared over airprint.  It obviously has to be on the same local network as the iOS client.  First install a necessary dependency used for Bonjour browsing
+Use the Terminal app to run the install script on the Mac with the printer to be
+shared over airprint.  It obviously has to be on the same local network as the
+iOS client.  First install a necessary dependency used for Bonjour browsing.
+Note: this may not be simple, for example, the system Ruby install may not allow
+adding gems so you would have to install a separate Ruby version requiring you
+to install homebrew and XCode and ruby installers, and also the gem you install
+in this version may not be available when running the script below as sudo. See
+https://stackoverflow.com/a/54873916/481207
+
+See manual install below if you cannot install the dependency easily.
 
 	gem install dnssd
 
@@ -20,7 +29,64 @@ The script has a -h option to get more information
 
 	./airprintfix.rb -h
 
-The rest of this document explains how it works if you want to customise the install.
+The rest of this document explains a manual install and details about how this
+works.
+
+## Manual Install
+
+If you have difficulty installing Ruby and/or its dependency you can create the
+required files manually.
+
+1. Make sure you have printer sharing enabled for your printer (System
+   Preferences)
+2. Copy the templates `airprintfix.sh` and `local.hostname.airprintfix.plist` to
+   `/Library/LaunchDaemons`
+3. Find your hostname (ignore any suffix after the first dot, for example `.local`)
+```
+hostname
+```
+4. Rename `/Library/LaunchDaemons/local.hostname.airprintfix.plist` by replacing
+   the word `hostname` by your hostname from above
+5. Edit the renamed file by replacing the word `hostname` on line 6 by your
+   hostname from above
+5. Find the name of your printer (the last column under `Instance` - press
+   `CTRL-C` to exit):
+```
+dns-sd -B _ipp._tcp local
+```
+7. Find the printer details (copy your printer name from above - press `CTRL-C`
+   to exit):
+```
+dns-sd -L "printer name goes here" _ipp._tcp local
+```
+8. Edit `/Library/LaunchDaemons/airprintfix.sh` by replacing `<insert printer
+   name here>` with the printer name on line 3 (keeping the suffix `airprint`)
+   and adding all the printer details except `UUID`, and keeping `URF` which is
+   required and the template `pdl` which must contain `image/urf`. Use single
+   quotes around the values as shown in the template examples. Unquote any
+   spaces or parentheses, etc., for example, replace `\(` by `(`. Ensure there
+	 is a tab at the beginning of each line except the first line. Ensure there is
+	 a backslash `\` at the end of each line except the last line
+9. Execute the following commands (replacing the word `hostname` by your
+   hostname from above)
+
+```
+chmod +x /Library/LaunchDaemons/airprintfix.sh
+chmod o-w /Library/LaunchDaemons/airprintfix.sh
+sudo chown root:wheel /Library/LaunchDaemons/local.hostname.airprintfix.plist
+sudo launchctl load /Library/LaunchDaemons/local.hostname.airprintfix.plist
+```
+
+## Manual Uninstall
+
+To uninstall run the following command (replacing the word `hostname` by your
+   hostname from above) then delete `/Library/LaunchDaemons/airprintfix.sh` and
+   the plist file as well.
+```
+sudo launchctl unload /Library/LaunchDaemons/local.hostname.airprintfix.plist
+```
+
+## How it works
 
 ### Airprint basics
 
@@ -55,7 +121,7 @@ The rest of this document explains how it works if you want to customise the ins
 	* The bits inside double asterisks are unique to your setup's TXT lines and should be changed to agree
 	* Note each line (except the last) ends in a backspace to continue across multiple lines
 	* Also spaces inside keyword values have to be protected by a backslash
-	* The last line should replace the existing pdl 
+	* The last line should replace the existing pdl
 5. Save this in Documents as airprint.sh (in plain text format!)
 
 To test it run Terminal.app from Applications/Utilities and type
@@ -91,7 +157,7 @@ To ensure the service runs at all times we need to have it run automatically in 
 		pdl=application/pdf,image/urf
 
 * The text in quotes will need to be edited.  Any embedded blanks or newlines outside quotes need to be
-protected with backslashes. 
+protected with backslashes.
 	* *"name to be advertised"* is the name you want to give to this print queue
 	* *"queue name"* is the name the host computer gives to the queue, see printers page in preferences on the host
 	* *descriptive text* is subtitle for the printer.  Enter any useful description here.
@@ -105,7 +171,7 @@ An example script might be:
 		priority=0 \
 		pdl=application/pdf,image/urf
 
-		
+
 ### The launch script[launch]
 
 	<?xml version='1.0' encoding='UTF-8'?>
@@ -134,10 +200,12 @@ An example script might be:
 ### Terminal script[terminal]
 
 	cd /Library/LaunchDaemons
-	mv ~/Documents/airprint.sh .
+	mv ~/Documents/airprintfix.sh .
 	mv ~/Documents/local.hostname.plist .
-	chmod +x airprint.sh
-	launchctl load /Library/LaunchDaemons/local.hostname.plist
+	chmod +x airprintfix.sh
+	chmod o-w airprintfix.sh
+	sudo chown root:wheel /Library/LaunchDaemons/local.hostname.airprintfix.plist
+	sudo launchctl load /Library/LaunchDaemons/local.hostname.airprintfix.plist
 
 ### Running dns-sd[dns-sd]
 
@@ -148,7 +216,7 @@ To browse all IPP services on a machine
 	dns-sd -B _ipp._tcp local
 
 Typical output might be
-	
+
 	$ dns-sd -B _ipp._tcp local
 	Browsing for _ipp._tcp.local
 	DATE: ---Sun 17 Nov 2013---
@@ -168,7 +236,7 @@ which will show the TXT output for that name
 	15:31:01.625  ...STARTING...
 	15:31:02.087  Samsung\032ML-1630W\032Series\032@\032macmini._ipp._tcp.local. can be reached at macmini.local.:631 (interface 4)
 	 txtvers=1 qtotal=1 rp=printers/Samsung_ML_1630W_Series ty=Samsung\ ML-1630W\ Series adminurl=https://macmini.local.:631/printers/Samsung_ML_1630W_Series note=macmini priority=0 product=\(Samsung\ ML-1630W\ Series\) pdl=application/octet-stream,application/pdf,application/postscript,image/jpeg,image/png,image/pwg-raster UUID=c0bd8783-3e06-30da-4657-11000328a59d TLS=1.2 printer-state=3 printer-type=0x9006
-	
+
 Note that this is a network printer on another machine.
 
 
@@ -176,6 +244,7 @@ Note that this is a network printer on another machine.
 ### References
 
 [Bonjour Browser download page](http://www.tildesoft.com)
+
 [Apple Bonjour printer spec](https://developer.apple.com/bonjour/printing-specification/bonjourprinting-1.2.pdf)
 
 
