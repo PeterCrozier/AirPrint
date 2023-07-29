@@ -4,18 +4,10 @@
 
 Use the Terminal app to run the install script on the Mac with the printer to be
 shared over airprint.  It obviously has to be on the same local network as the
-iOS client.  First install a necessary dependency used for Bonjour browsing.
-Note: this may not be simple, for example, the system Ruby install may not allow
-adding gems so you would have to install a separate Ruby version requiring you
-to install homebrew and XCode and ruby installers, and also the gem you install
-in this version may not be available when running the script below as sudo. See
-https://stackoverflow.com/a/54873916/481207
+iOS client.
 
-See manual install below if you cannot install the dependency easily.
-
-	gem install dnssd
-
-Then to test the feature run
+Then to test the feature run (this also creates the shell file and plist file in
+the current directory)
 
 	./airprintfix.rb -t
 
@@ -34,8 +26,8 @@ works.
 
 ## Manual Install
 
-If you have difficulty installing Ruby and/or its dependency you can create the
-required files manually.
+If you don't have Ruby installed and don't want to install Ruby or have
+difficulty installing Ruby.
 
 1. Make sure you have printer sharing enabled for your printer (System
    Preferences)
@@ -72,7 +64,7 @@ dns-sd -L "printer name goes here" _ipp._tcp local
 
 ```
 chmod +x /Library/LaunchDaemons/airprintfix.sh
-chmod o-w /Library/LaunchDaemons/airprintfix.sh
+chmod go-w /Library/LaunchDaemons/airprintfix.sh
 sudo chown root:wheel /Library/LaunchDaemons/local.hostname.airprintfix.plist
 sudo launchctl load /Library/LaunchDaemons/local.hostname.airprintfix.plist
 ```
@@ -203,7 +195,7 @@ An example script might be:
 	mv ~/Documents/airprintfix.sh .
 	mv ~/Documents/local.hostname.plist .
 	chmod +x airprintfix.sh
-	chmod o-w airprintfix.sh
+	chmod go-w airprintfix.sh
 	sudo chown root:wheel /Library/LaunchDaemons/local.hostname.airprintfix.plist
 	sudo launchctl load /Library/LaunchDaemons/local.hostname.airprintfix.plist
 
