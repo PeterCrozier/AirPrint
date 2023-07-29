@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+        <key>Label</key>
+          <string>local.hostname.airprintfix</string>
+        <key>ProgramArguments</key>
+          <array>
+                  <string>/Library/LaunchDaemons/airprintfix.sh</string>
+          </array>
+        <key>LowPriorityIO</key>
+          <true/>
+        <key>Nice</key>
+          <integer>1</integer>
+        <key>UserName</key>
+          <string>root</string>
+        <key>RunAtLoad</key>
+          <true/>
+        <key>Keeplive</key>
+          <true/>
+</dict>
+</plist>

@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 #
-require 'dnssd'
+require 'open3'
 require 'timeout'
 require 'optparse'
+require 'shellwords'
 
 class Airprint
 
@@ -12,51 +13,59 @@ class Airprint
     self.service="_ipp._tcp"
     self.domain="local"
     self.script="airprintfix.sh"
-    self.timeout=5
+    self.timeout=3
   end
 
   def browse(s=self.service, d=self.domain, t=self.timeout)
     printers=[]
-    t = Thread.new do
-        puts "Browsing for #{s} services in domain #{d}..."
-        DNSSD.browse s, d do |reply|
-          DNSSD.resolve reply do |r|
-            puts "Resolved #{r.name}"
-            printers.push r
-          end
-        end
-    end
-    sleep self.timeout
-    Thread.kill t
+    puts "Browsing for #{s} services in domain #{d}..."
+
+    Open3.popen2("dns-sd -B _ipp._tcp local") {|i,o,t|
+      sleep self.timeout
+      Process.kill("INT", t.pid)
+      o.each do |line|
+        printers.push line.split('_ipp._tcp.')[1].strip if line =~ /_ipp._tcp./ if line !~ /^Browsing/ if line !~ /airprint/
+      end
+    }
+
     # there might be more than one interface
-    up = printers.uniq { |r| r.name }
+    up = printers.uniq
     puts "Found #{up.count} unique from #{printers.count} entries" if up.count > 0
     up
   end
 
   def expand(fd, r, bg)
-    # Expand out the Bonjour response
-    puts "Service Name: #{r.name}\nResolved to: #{r.target}:#{r.port}\nService type: #{r.type}"
-    txt = r.text_record
-    # remove entry inserted by Bonjour
-    txt.delete 'UUID'
-    # Add Airprint txt fields
-    txt['URF'] = 'none'
-    txt['pdl'] = 'application/pdf,image/urf'
-    txt.each_pair do |k,v|
-      puts "\t#{k} = #{v}"
-    end
+    puts "Service Name: #{r}"
+    txt = []
+
+    Open3.popen2("dns-sd -L \"#{r}\" _ipp._tcp local") {|i,o,t|
+      sleep self.timeout
+      Process.kill("INT", t.pid)
+      array = []
+      o.each do |line|
+        array = line.shellsplit if line =~ /txtvers/
+      end
+      array.each do |pair|
+        # remove entry inserted by Bonjour and pdl which is hardwired
+        txt.push pair.strip if pair !~ /^UUID/ if pair !~ /^pdl/
+      end
+    }
+
+    # # Add Airprint txt fields
+    txt.push('pdl=application/pdf,image/urf')
+    txt.push('URF=none')
+
     fd.write "#!/bin/bash\n\n"
-    fd.write "dns-sd -R \"#{r.name} airprint\" _ipp._tcp,_universal . 631"
-    txt.each_pair do |k,v|
-      fd.write " \\\n\t#{k}=\'#{v}\'"
+    fd.write "dns-sd -R \"#{r} airprint\" _ipp._tcp,_universal . 631"
+    txt.each do |p|
+      pair = p.split(/=/, 2)
+      fd.write " \\\n\t#{pair[0]}='#{pair[1]}'"
     end
     if bg
       fd.write ' &'
     end
     fd.puts
   end
-
 end
 
 
@@ -100,7 +109,6 @@ if ARGV.count != 0 or cmd.count > 1
   exit
 end
 
-
 # require sudo to update /Library
 isRoot = (Process.euid == 0)
 if (cmd.key? :install or cmd.key? :uninstall) and !isRoot
@@ -141,8 +149,6 @@ plist=<<EOT
 </plist>
 EOT
 
-
-
 if cmd.key? :uninstall
   system "launchctl unload #{launchfile}"
   rc = $?.exitstatus
@@ -152,7 +158,6 @@ if cmd.key? :uninstall
   File.delete File.expand_path launchfile, launchlib
   exit rc
 end
-
 
 # determine existing printers
 printers = ap.browse
